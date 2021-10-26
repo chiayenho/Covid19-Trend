@@ -1,0 +1,223 @@
+---
+title: "HW1 Group Part"
+author: "Adam Baker, Ankita Bagaria, Heamanth Baskaran, Yotong Liu, Vivian Ho"
+date: "10/10/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(zoo)     
+library(usmap)
+library(tidyverse)
+library(readxl)
+
+usstates_cases = read.csv('/Users/vivianho/Documents/r/data/us-states.csv')
+# data source: https://github.com/nytimes/covid-19-data
+sales = read_excel("/Users/vivianho/Documents/r/data/mrtssales92-present.xls")
+# data source: https://www.kaggle.com/jcraggy/covid-report-usa-new-england-thailand
+usstates_population = read.csv('/Users/vivianho/Documents/r/data/usstatepopulation.csv')
+# data source: https://www.ers.usda.gov/data-products/county-level-data-sets/
+usstates_vacinations = read.csv('/Users/vivianho/Documents/r/data/us_state_vaccinations.csv')
+# data source: https://ourworldindata.org/us-states-vaccinations
+#data: https://drive.google.com/drive/folders/17Up1QtpA97rYExx8kOLc1rmvNx_Q2Kaa?usp=sharing
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### US covid cases trend
+
+```{r}
+
+usstates_cases_all <- usstates_cases %>%
+  arrange(desc(date)) %>% 
+  group_by(date) %>% 
+  summarise(daily_cases = sum(cases)) %>% 
+  mutate(new_cases = daily_cases - lag(x = daily_cases, n = 1, order_by = date)) %>%
+  mutate(case_7da = rollmean(new_cases, k = 7, fill = NA)) %>%
+  drop_na()
+
+usstates_cases_all <- usstates_cases_all %>% filter(date < '2020-06-01')
+
+Date <- as.Date(usstates_cases_all[['date']])
+Daily_Cases <- as.integer(usstates_cases_all[['daily_cases']])
+New_Cases <- as.integer(usstates_cases_all[['new_cases']])
+Seven_days_Avg <- as.integer(usstates_cases_all[['case_7da']])
+
+usstates_cases_all <- data.frame(Date, New_Cases, Daily_Cases, Seven_days_Avg)
+
+# 7 days average line plot 
+ggplot(usstates_cases_all, aes(x = Date, y = Seven_days_Avg)) + geom_line() + 
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  labs(x = 'date', y = 'reported cases', 
+       title = 'Coronavirus in the US 2020: 7-day average ') +
+  theme_bw() 
+
+```
+
+### Effect of covid on retail Sales under covid pandemic
+```{r}
+data <- sales %>% 
+  select(`Kind of Business`,
+         `Jan. 2020`,
+         `Feb. 2020`,
+         `Mar. 2020`,
+         `Apr. 2020`,
+         `May 2020`)
+data<- data %>% filter(`Kind of Business`=="Furniture and home furnishings stores" | 
+`Kind of Business`=="Electronics and appliance stores" |
+`Kind of Business`=="Food and beverage stores" |
+`Kind of Business`=="Grocery stores" |
+`Kind of Business`=="Pharmacies and drug stores" |
+`Kind of Business`=="Clothing and clothing access. stores" 
+)
+data$`Jan. 2020` <- as.numeric(data$`Jan. 2020`)
+data$`Feb. 2020` <- as.numeric(data$`Feb. 2020`)
+data$`Mar. 2020` <- as.numeric(data$`Mar. 2020`)
+data$`Apr. 2020` <- as.numeric(data$`Apr. 2020`)
+data$`May 2020` <- as.numeric(data$`May 2020`)
+plotdata <- data %>% group_by(`Kind of Business`) %>%
+  summarise(Jan=mean(`Jan. 2020`),
+            Feb=mean(`Feb. 2020`),
+            Mar=mean(`Mar. 2020`),
+            Apr=mean(`Apr. 2020`),
+            May=mean(`May 2020`),
+      )
+
+data2 <- pivot_longer(plotdata, cols = -`Kind of Business`, names_to = "Months", 
+                      values_to = "Sales") 
+data2$Months <- factor(data2$Months, levels = c("Jan","Feb","Mar","Apr","May"))
+ggplot(data2, aes( x = Months, y = Sales, color = `Kind of Business`)) + 
+  geom_point(stat = "identity") + geom_line(aes(group = `Kind of Business`)) + 
+  theme_light() + 
+  labs(title = "Effect of covid on retail Sales over time", y = "Sales in millions")
+
+```
+
+### 2021 September covide cases per milllion population
+```{r}
+usstates_cases_sep <- usstates_cases %>%
+  arrange(state, date)%>% 
+  mutate(new_cases = cases - lag(x = cases, n = 1)) %>%
+  drop_na()
+
+# filter the date
+usstates_cases_sep <- usstates_cases_sep %>%
+  filter(date > '2021-08-31') %>%
+  filter(date < '2021-10-01') 
+
+# count the average 
+usstates_cases_sep <- usstates_cases_sep %>%
+  group_by(state) %>%
+  summarise(avg_cases = mean(new_cases))%>%
+  drop_na()
+
+# join the US states population data set
+usstates_population[[2]] <- as.numeric(usstates_population[[2]])
+usstates_cases_sep <- left_join(usstates_cases_sep, usstates_population, by = 'state')
+
+# count the cases per million people
+usstates_cases_sep <- usstates_cases_sep %>% 
+  mutate(avg_cases_per_million = avg_cases*1000000/population2019)
+
+# remove n/a columns
+usstates_cases_sep <- na.omit(usstates_cases_sep)
+
+# bar plot
+ggplot(usstates_cases_sep, aes(x = reorder(state, avg_cases_per_million),  
+                               y = avg_cases_per_million)) + 
+  ylim(0, 1200) + 
+  geom_bar(stat="identity", width=0.7, fill="steelblue") + 
+  labs( x = 'states', y = '30 days average cases', 
+        title = '2021/09/01 - 2021/09/30 average cases per milllion population') +
+  theme_bw() +
+  theme(axis.text = element_text(size = 6)) +
+  coord_flip()
+```
+
+### 2021 US people fully vaccinated per hundred
+```{r}
+usstates_vacination <- usstates_vacinations
+usstates_vacination <- usstates_vacination %>%
+  filter(usstates_vacination['date'] == '2021-09-30') %>%
+  arrange(desc(people_fully_vaccinated_per_hundred))
+
+# change 'New York State' to 'New York'
+usstates_vacination$location[usstates_vacination$location == 'New York State'] <- 'New York'
+
+# arrange into a new dataframe
+usstates_vacination <- data_frame(usstates_vacination['location'],
+                    usstates_vacination['people_fully_vaccinated_per_hundred'])
+
+# change column name 'location' to 'state'
+colnames(usstates_vacination)[which(names(usstates_vacination) == "location")] <- "state"
+
+# drop the invalid state
+usstates_vacination<-usstates_vacination[-c(1,2,6,7,27,37,59,60,61),]
+usstates_vacination <- na.omit(usstates_vacination)
+
+# make a gragh
+ggplot(usstates_vacination, aes(x = reorder(state, people_fully_vaccinated_per_hundred), 
+                                y = people_fully_vaccinated_per_hundred)) + 
+  ylim(0, 80) + 
+  geom_bar(stat="identity", width=0.7, fill="steelblue") + 
+  labs( x = 'states', y = 'people fully vaccinated per hundred', 
+        title = '2021/09/30 people fully vaccinated per hundred') +
+  theme_bw() +
+  theme(axis.text = element_text(size = 6)) +
+  coord_flip()
+
+```
+
+
+
+```{r}
+# join cases data with vacciniton data
+metric <- left_join(usstates_cases_sep, usstates_vacination, by ='state')
+metric <- na.omit(metric)
+
+# calculate the median value of vaccination and cases
+median_vac<- median(metric$people_fully_vaccinated_per_hundred)
+median_cases <- median(metric$avg_cases_per_million)
+
+# categorized 50 states into 4 categories, which are target, be prepared, risky, and dangerous
+metric <- metric %>% mutate(category = case_when(
+(people_fully_vaccinated_per_hundred>=median_vac) & 
+  (avg_cases_per_million<median_cases) ~ 'Target',
+(people_fully_vaccinated_per_hundred>=median_vac) & 
+  (avg_cases_per_million>=median_cases)~'Be Prepared',
+(people_fully_vaccinated_per_hundred<median_vac) & 
+  (avg_cases_per_million<median_cases) ~ 'Risky',
+(people_fully_vaccinated_per_hundred<median_vac) & 
+  (avg_cases_per_million>=median_cases) ~ 'Dangerous',
+                                        TRUE ~ as.character('none')) )
+
+metric <- mutate(metric, category = factor(category))
+
+# deal with fips data
+usstates_fips <- usstates_cases %>%
+  group_by(state, fips) %>%
+  summarise( useless = mean(cases))
+
+# combine metric with fips data, now we get cases, vaccination, and fips together in a dataframe
+metric2 <- full_join(metric, usstates_fips, by = 'state')
+
+# graph
+p <- plot_usmap(regions = "states", data = metric2, values = 'category', labels = TRUE) + 
+  labs(title = "US Counties map ", subtitle = "By analyzing the covid cases and 
+       vaccination rate, we divide the 50 states into four categories.") + 
+  scale_fill_manual(values = c(`Target` = "#33CC33", `Be Prepared` = "#0066FF", 
+                               `Risky` = "#FFCC00", `Dangerous` = "#FF3333"), name = "category") + 
+  theme(legend.position = "right")
+
+# set label size
+p$layers[[2]]$aes_params$size <- 3
+print(p)
+
+```
+

@@ -1,0 +1,96 @@
+---
+title: "Homework 1 Individual Part"
+author: "Vivian Ho"
+date: "10/7/2021"
+output: pdf_document
+---
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+
+### a. Import the ”hills.csv” dataset into R
+```{r}
+hills = read.csv('/Users/vivianho/Documents/r/data/hills.csv')
+head(hills)
+```
+
+### b. Arrange data based on racing time in descending order, and print out the race name with longest racing time
+```{r}
+hills_longest_time <- hills %>% arrange(desc(Time))
+head(hills_longest_time$Race, n = 1)
+```
+
+### c. Create a new variable, named “speed”, to record the record speed of each race (miles/minute)
+```{r}
+hills <- hills %>% mutate(speed = Distance/Time)
+```
+
+### d. Create a new variable, named “High Race”, that takes value 1 if a race has more than 1000 feet climb and 0 otherwise
+```{r}
+hills <- hills %>% mutate(High_Race = ifelse(Climb>1000, '1', '0'))
+head(hills)
+```
+
+
+### e. Report the average racing time for high races (i.e., races with more than 1000 feet climb) and low races, respectively
+```{r}
+hills %>% group_by(High_Race) %>%
+  summarize(avg_time = mean(Time))
+```
+
+### f. Create a plot to show the distribution of record time for all races
+```{r}
+ggplot(hills, aes(x=Time)) + geom_histogram(bins = 30) +
+  labs(x = 'Time', y = 'Count', title = 'Roecord time of all races') + theme_bw()
+```
+
+### g. Create a plot to show the relationship between race distance and record time
+```{r}
+ggplot(hills, aes(x = Distance, y = Time)) + geom_point() +
+  labs(x =  'Distance', y = 'Time', 
+       title = 'Relationship between race distance and record time') + theme_bw()
+```
+
+### h. Create a plot to show the distributions of race distance for high races and low races respectively (on the same plot)
+```{r}
+ggplot(hills, aes(x = Distance, group = High_Race, fill = High_Race)) + geom_density(alpha = 0.3) +
+  labs(x = 'Distance', y = 'Count', Title = 'distributions of race distance for 
+       high races and low races') + theme_bw()
+```
+
+### i. Download ”hills2.csv” from Canvas. This dataset contains 94 Scottish Hill Races. Each row contains the name, distance (in kilometers), climb (in meters), and record time (in minutes) for both male and female contestants of a given race. Import this dataset into R (note that it has a delimiter that is not a comma)
+
+```{r}
+hills2 = read.csv('/Users/vivianho/Documents/r/data/hills2.csv', sep = ";")
+head(hills2)
+```
+
+### j. Remove rows that have missing values on record time
+```{r}
+hills2 <- hills2 %>% filter((!is.na(Mens.Time)) & (!is.na(Womens.Time)))
+```
+
+
+### k. Merge hills2 data with the original hills data based on race name, keep all races in the original hills data (in database language, you should left join hills2 to the original hills data)
+```{r}
+hills_all = left_join(hills, hills2, by = 'Race')
+head(hills_all)
+```
+
+
+### l. Based on the merged dataset, create a plot to show the relationship between record time and climb (in feet) for male and female contestants respectively (on the same plot)
+
+```{r}
+hills_all_2 <- hills_all[, c('Race', 'Climb.x', 'Mens.Time', 'Womens.Time')]
+hills_all_2 <- hills_all_2 %>% filter((!is.na(Mens.Time)) & (!is.na(Womens.Time)))
+hills_all_2 <- hills_all_2 %>% pivot_longer(hills_all_2, cols = c('Mens.Time', 'Womens.Time'),
+                                            names_to = "Sex", values_to = "Time")
+hills_all_2
+ggplot(hills_all_2, aes(x = Climb.x, y = Time, color = Sex)) + geom_line() +
+  labs(x = 'Climb(feet)', y = 'Time', 
+  title = 'Relationship between record time and climb for male and female' )
+
+```
